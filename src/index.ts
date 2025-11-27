@@ -188,9 +188,6 @@ class ERPNextClient {
   }
 }
 
-// Cache for doctype metadata
-const doctypeCache = new Map<string, any>();
-
 // Initialize ERPNext client
 const erpnext = new ERPNextClient();
 
