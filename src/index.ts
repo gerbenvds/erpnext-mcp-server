@@ -186,6 +186,29 @@ class ERPNextClient {
       }
     }
   }
+
+  // Get DocType metadata including field definitions
+  async getDocTypeFields(doctype: string): Promise<any[]> {
+    try {
+      const response = await this.axiosInstance.get(`/api/resource/DocType/${encodeURIComponent(doctype)}`);
+      
+      if (response.data && response.data.data && response.data.data.fields) {
+        // Return relevant field information
+        return response.data.data.fields.map((field: any) => ({
+          fieldname: field.fieldname,
+          fieldtype: field.fieldtype,
+          label: field.label,
+          reqd: field.reqd || 0,
+          options: field.options || null,
+          description: field.description || null
+        }));
+      }
+      
+      return [];
+    } catch (error: any) {
+      throw new Error(`Failed to get fields for ${doctype}: ${error?.message || 'Unknown error'}`);
+    }
+  }
 }
 
 // Initialize ERPNext client
@@ -625,26 +648,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       try {
-        // Get a sample document to understand the fields
-        const documents = await erpnext.getDocList(doctype, {}, ["*"], 1);
-        
-        if (!documents || documents.length === 0) {
-          return {
-            content: [{
-              type: "text",
-              text: `No documents found for ${doctype}. Cannot determine fields.`
-            }],
-            isError: true
-          };
-        }
-        
-        // Extract field names from the first document
-        const sampleDoc = documents[0];
-        const fields = Object.keys(sampleDoc).map(field => ({
-          fieldname: field,
-          value: typeof sampleDoc[field],
-          sample: sampleDoc[field]?.toString()?.substring(0, 50) || null
-        }));
+        // Get field definitions from DocType metadata
+        const fields = await erpnext.getDocTypeFields(doctype);
         
         return {
           content: [{
