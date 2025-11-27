@@ -23,6 +23,68 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosInstance } from "axios";
 
+// Input validation utilities
+const VALID_IDENTIFIER_PATTERN = /^[a-zA-Z0-9_\- ]+$/;
+const MAX_IDENTIFIER_LENGTH = 140; // ERPNext default max name length
+
+/**
+ * Validates and sanitizes a doctype or document name
+ * @throws Error if validation fails
+ */
+function validateIdentifier(value: unknown, fieldName: string): string {
+  if (value === undefined || value === null) {
+    throw new Error(`${fieldName} is required`);
+  }
+  
+  const strValue = String(value).trim();
+  
+  if (strValue.length === 0) {
+    throw new Error(`${fieldName} cannot be empty`);
+  }
+  
+  if (strValue.length > MAX_IDENTIFIER_LENGTH) {
+    throw new Error(`${fieldName} exceeds maximum length of ${MAX_IDENTIFIER_LENGTH} characters`);
+  }
+  
+  if (!VALID_IDENTIFIER_PATTERN.test(strValue)) {
+    throw new Error(`${fieldName} contains invalid characters. Only alphanumeric characters, spaces, hyphens, and underscores are allowed.`);
+  }
+  
+  return strValue;
+}
+
+/**
+ * Validates that a value is a non-null object
+ */
+function validateObject(value: unknown, fieldName: string): Record<string, unknown> {
+  if (value === undefined || value === null) {
+    throw new Error(`${fieldName} is required`);
+  }
+  
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an object`);
+  }
+  
+  return value as Record<string, unknown>;
+}
+
+/**
+ * Validates optional positive integer
+ */
+function validatePositiveInt(value: unknown, fieldName: string): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  
+  const numValue = Number(value);
+  
+  if (!Number.isInteger(numValue) || numValue <= 0) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+  
+  return numValue;
+}
+
 // ERPNext API client configuration
 class ERPNextClient {
   private baseUrl: string;
@@ -475,19 +537,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       
-      const doctype = String(request.params.arguments?.doctype);
-      const fields = request.params.arguments?.fields as string[] | undefined;
-      const filters = request.params.arguments?.filters as Record<string, any> | undefined;
-      const limit = request.params.arguments?.limit as number | undefined;
-      
-      if (!doctype) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Doctype is required"
-        );
-      }
-      
       try {
+        const doctype = validateIdentifier(request.params.arguments?.doctype, "doctype");
+        const fields = request.params.arguments?.fields as string[] | undefined;
+        const filters = request.params.arguments?.filters as Record<string, unknown> | undefined;
+        const limit = validatePositiveInt(request.params.arguments?.limit, "limit");
+        
         const documents = await erpnext.getDocList(doctype, filters, fields, limit);
         return {
           content: [{
@@ -496,10 +551,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }]
         };
       } catch (error: any) {
+        if (error instanceof McpError) throw error;
         return {
           content: [{
             type: "text",
-            text: `Failed to get ${doctype} documents: ${error?.message || 'Unknown error'}`
+            text: `Failed to get documents: ${error?.message || 'Unknown error'}`
           }],
           isError: true
         };
@@ -517,17 +573,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       
-      const doctype = String(request.params.arguments?.doctype);
-      const data = request.params.arguments?.data as Record<string, any> | undefined;
-      
-      if (!doctype || !data) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Doctype and data are required"
-        );
-      }
-      
       try {
+        const doctype = validateIdentifier(request.params.arguments?.doctype, "doctype");
+        const data = validateObject(request.params.arguments?.data, "data");
+        
         const result = await erpnext.createDocument(doctype, data);
         return {
           content: [{
@@ -536,10 +585,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }]
         };
       } catch (error: any) {
+        if (error instanceof McpError) throw error;
         return {
           content: [{
             type: "text",
-            text: `Failed to create ${doctype}: ${error?.message || 'Unknown error'}`
+            text: `Failed to create document: ${error?.message || 'Unknown error'}`
           }],
           isError: true
         };
@@ -557,18 +607,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       
-      const doctype = String(request.params.arguments?.doctype);
-      const name = String(request.params.arguments?.name);
-      const data = request.params.arguments?.data as Record<string, any> | undefined;
-      
-      if (!doctype || !name || !data) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Doctype, name, and data are required"
-        );
-      }
-      
       try {
+        const doctype = validateIdentifier(request.params.arguments?.doctype, "doctype");
+        const name = validateIdentifier(request.params.arguments?.name, "name");
+        const data = validateObject(request.params.arguments?.data, "data");
+        
         const result = await erpnext.updateDocument(doctype, name, data);
         return {
           content: [{
@@ -577,10 +620,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }]
         };
       } catch (error: any) {
+        if (error instanceof McpError) throw error;
         return {
           content: [{
             type: "text",
-            text: `Failed to update ${doctype} ${name}: ${error?.message || 'Unknown error'}`
+            text: `Failed to update document: ${error?.message || 'Unknown error'}`
           }],
           isError: true
         };
@@ -598,17 +642,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       
-      const reportName = String(request.params.arguments?.report_name);
-      const filters = request.params.arguments?.filters as Record<string, any> | undefined;
-      
-      if (!reportName) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Report name is required"
-        );
-      }
-      
       try {
+        const reportName = validateIdentifier(request.params.arguments?.report_name, "report_name");
+        const filters = request.params.arguments?.filters as Record<string, unknown> | undefined;
+        
         const result = await erpnext.runReport(reportName, filters);
         return {
           content: [{
@@ -617,10 +654,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }]
         };
       } catch (error: any) {
+        if (error instanceof McpError) throw error;
         return {
           content: [{
             type: "text",
-            text: `Failed to run report ${reportName}: ${error?.message || 'Unknown error'}`
+            text: `Failed to run report: ${error?.message || 'Unknown error'}`
           }],
           isError: true
         };
@@ -638,16 +676,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       
-      const doctype = String(request.params.arguments?.doctype);
-      
-      if (!doctype) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Doctype is required"
-        );
-      }
-      
       try {
+        const doctype = validateIdentifier(request.params.arguments?.doctype, "doctype");
+        
         // Get field definitions from DocType metadata
         const fields = await erpnext.getDocTypeFields(doctype);
         
@@ -658,10 +689,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }]
         };
       } catch (error: any) {
+        if (error instanceof McpError) throw error;
         return {
           content: [{
             type: "text",
-            text: `Failed to get fields for ${doctype}: ${error?.message || 'Unknown error'}`
+            text: `Failed to get fields: ${error?.message || 'Unknown error'}`
           }],
           isError: true
         };
