@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Build output
+build
+
+# Documentation
+*.md
+docs
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# Tests
+*.test.ts
+vitest.config.ts
+coverage
+
+# Misc
+.env
+.env.*
+*.log
+
