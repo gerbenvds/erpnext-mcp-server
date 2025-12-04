@@ -3,10 +3,87 @@
  * Handles all communication with the ERPNext/Frappe API
  */
 
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosInstance, AxiosError } from "axios";
 import { Config } from "../utils/config.js";
 import { Logger } from "../utils/logger.js";
 import { DocTypeField, ERPNextDocument } from "../models/types.js";
+
+/**
+ * Extract a detailed error message from an axios error response.
+ * ERPNext/Frappe returns validation errors in the response body.
+ */
+function extractErrorDetails(error: unknown): string {
+  if (!axios.isAxiosError(error)) {
+    return error instanceof Error ? error.message : 'Unknown error';
+  }
+
+  const axiosError = error as AxiosError;
+  const status = axiosError.response?.status;
+  const statusText = axiosError.response?.statusText;
+  const responseData = axiosError.response?.data as Record<string, unknown> | undefined;
+
+  // ERPNext typically returns errors in these formats:
+  // { "exc_type": "ValidationError", "exception": "...", "_server_messages": "[...]" }
+  // { "message": "..." }
+  // { "exc": "..." }
+  
+  const parts: string[] = [];
+  
+  if (status) {
+    parts.push(`HTTP ${status}${statusText ? ` ${statusText}` : ''}`);
+  }
+
+  if (responseData) {
+    // Try to extract _server_messages (JSON array of JSON strings)
+    if (responseData._server_messages) {
+      try {
+        const serverMessages = JSON.parse(responseData._server_messages as string) as string[];
+        const messages = serverMessages.map((msg: string) => {
+          try {
+            const parsed = JSON.parse(msg);
+            return parsed.message || msg;
+          } catch {
+            return msg;
+          }
+        });
+        parts.push(messages.join('; '));
+      } catch {
+        parts.push(String(responseData._server_messages));
+      }
+    }
+    // Try message field
+    else if (responseData.message) {
+      parts.push(String(responseData.message));
+    }
+    // Try exception field
+    else if (responseData.exception) {
+      // Clean up Python traceback - extract just the error message
+      const exc = String(responseData.exception);
+      const lines = exc.split('\n').filter(l => l.trim());
+      const lastLine = lines[lines.length - 1];
+      if (lastLine && !lastLine.startsWith('Traceback') && !lastLine.startsWith('  ')) {
+        parts.push(lastLine);
+      } else {
+        parts.push(exc.substring(0, 500)); // Truncate long tracebacks
+      }
+    }
+    // Try exc field  
+    else if (responseData.exc) {
+      parts.push(String(responseData.exc).substring(0, 500));
+    }
+    // If exc_type is present, include it
+    else if (responseData.exc_type) {
+      parts.push(`${responseData.exc_type}`);
+    }
+  }
+
+  // Fallback to axios message if we couldn't extract anything useful
+  if (parts.length === 0 || (parts.length === 1 && status)) {
+    parts.push(axiosError.message);
+  }
+
+  return parts.join(' - ');
+}
 
 export class ERPNextClient {
   private baseUrl: string;
@@ -52,8 +129,7 @@ export class ERPNextClient {
       const response = await this.axiosInstance.get(`/api/resource/${doctype}/${name}`);
       return response.data.data;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to get ${doctype} ${name}: ${message}`);
+      throw new Error(`Failed to get ${doctype} ${name}: ${extractErrorDetails(error)}`);
     }
   }
 
@@ -84,8 +160,7 @@ export class ERPNextClient {
       const response = await this.axiosInstance.get(`/api/resource/${doctype}`, { params });
       return response.data.data;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to get ${doctype} list: ${message}`);
+      throw new Error(`Failed to get ${doctype} list: ${extractErrorDetails(error)}`);
     }
   }
 
@@ -99,8 +174,7 @@ export class ERPNextClient {
       });
       return response.data.data;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to create ${doctype}: ${message}`);
+      throw new Error(`Failed to create ${doctype}: ${extractErrorDetails(error)}`);
     }
   }
 
@@ -118,8 +192,7 @@ export class ERPNextClient {
       });
       return response.data.data;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to update ${doctype} ${name}: ${message}`);
+      throw new Error(`Failed to update ${doctype} ${name}: ${extractErrorDetails(error)}`);
     }
   }
 
@@ -136,8 +209,7 @@ export class ERPNextClient {
       });
       return response.data.message;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to run report ${reportName}: ${message}`);
+      throw new Error(`Failed to run report ${reportName}: ${extractErrorDetails(error)}`);
     }
   }
 
@@ -160,7 +232,7 @@ export class ERPNextClient {
       
       return [];
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = extractErrorDetails(error);
       this.logger.error("Failed to get DocTypes:", message);
       
       // Try an alternative approach if the first one fails
@@ -180,8 +252,7 @@ export class ERPNextClient {
         
         return [];
       } catch (altError: unknown) {
-        const altMessage = altError instanceof Error ? altError.message : 'Unknown error';
-        this.logger.error("Alternative DocType fetch failed:", altMessage);
+        this.logger.error("Alternative DocType fetch failed:", extractErrorDetails(altError));
         
         // Fallback: Return a list of common DocTypes
         return [
@@ -214,8 +285,7 @@ export class ERPNextClient {
       
       return [];
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to get fields for ${doctype}: ${message}`);
+      throw new Error(`Failed to get fields for ${doctype}: ${extractErrorDetails(error)}`);
     }
   }
 }
