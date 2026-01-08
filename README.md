@@ -24,6 +24,66 @@ The server requires the following environment variables:
 - `ERPNEXT_URL` - The base URL of your ERPNext instance
 - `ERPNEXT_API_KEY` (optional) - API key for authentication
 - `ERPNEXT_API_SECRET` (optional) - API secret for authentication
+- `MCP_PORT` (optional) - Port for the HTTP server (default: 3000)
+
+## Running with Docker
+
+Build the Docker image:
+```bash
+docker build -t erpnext-mcp-server .
+```
+
+Run the container:
+```bash
+docker run -p 3000:3000 \
+  -e ERPNEXT_URL=http://your-erpnext-instance.com \
+  -e ERPNEXT_API_KEY=your-api-key \
+  -e ERPNEXT_API_SECRET=your-api-secret \
+  erpnext-mcp-server
+```
+
+The HTTP server will be available at `http://localhost:3000`.
+
+## HTTP Server Mode
+
+The server supports HTTP transport via the Streamable HTTP Server Transport, which is useful for web-based clients or when stdio transport isn't available.
+
+### Starting the HTTP Server
+
+```bash
+npm run start:http
+```
+
+Or directly:
+```bash
+node build/http-server.js
+```
+
+### Endpoints
+
+- `POST /mcp` - MCP message endpoint (handles initialization and requests)
+- `GET /mcp` - SSE stream endpoint (for server-sent events)
+- `DELETE /mcp` - Session termination endpoint
+- `GET /health` - Health check endpoint
+
+### Session Management
+
+The HTTP transport uses session IDs for managing client connections:
+
+1. Send an initialize request to `POST /mcp` without a session ID
+2. The server responds with `Mcp-Session-Id` header
+3. Include this session ID in subsequent requests via the `Mcp-Session-Id` header
+
+### Example: Health Check
+
+```bash
+curl http://localhost:3000/health
+```
+
+Response:
+```json
+{"status": "ok", "authenticated": true}
+```
 
 ## Development
 
@@ -43,6 +103,8 @@ npm run watch
 ```
 
 ## Installation
+
+### Option 1: Stdio Transport (Local)
 
 To use with Claude Desktop, add the server config:
 
@@ -69,6 +131,20 @@ To use with Claude in VSCode, add the server config to:
 
 On MacOS: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 On Windows: `%APPDATA%/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+
+### Option 2: HTTP Transport (Remote/Docker)
+
+For HTTP-based connections (e.g., when running in Docker or on a remote server):
+
+```json
+{
+  "mcpServers": {
+    "erpnext": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
 
 ### Debugging
 

@@ -75,7 +75,6 @@ export function registerToolHandlers(
               },
               filters: {
                 type: "object",
-                additionalProperties: true,
                 description: "Filters in the format {field: value} (optional)"
               },
               limit: {
@@ -98,7 +97,6 @@ export function registerToolHandlers(
               },
               data: {
                 type: "object",
-                additionalProperties: true,
                 description: "Document data"
               }
             },
@@ -121,7 +119,6 @@ export function registerToolHandlers(
               },
               data: {
                 type: "object",
-                additionalProperties: true,
                 description: "Document data to update"
               }
             },
@@ -140,7 +137,6 @@ export function registerToolHandlers(
               },
               filters: {
                 type: "object",
-                additionalProperties: true,
                 description: "Report filters (optional)"
               }
             },
