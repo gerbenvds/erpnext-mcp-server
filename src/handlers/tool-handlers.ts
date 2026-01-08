@@ -13,7 +13,6 @@ import { ERPNextClient } from "../client/erpnext-client.js";
 import { Logger } from "../utils/logger.js";
 import { 
   validateIdentifier, 
-  validateObject, 
   validatePositiveInt 
 } from "../utils/validation.js";
 import { CallToolResult } from "../models/types.js";
@@ -74,8 +73,8 @@ export function registerToolHandlers(
                 description: "Fields to include (optional)"
               },
               filters: {
-                type: "object",
-                description: "Filters in the format {field: value} (optional)"
+                type: "string",
+                description: "Filters as JSON string (e.g., '{\"status\": \"Active\"}') (optional)"
               },
               limit: {
                 type: "number",
@@ -96,8 +95,8 @@ export function registerToolHandlers(
                 description: "ERPNext DocType (e.g., Customer, Item)"
               },
               data: {
-                type: "object",
-                description: "Document data"
+                type: "string",
+                description: "Document data as JSON string (e.g., '{\"customer_name\": \"John\"}')"
               }
             },
             required: ["doctype", "data"]
@@ -118,8 +117,8 @@ export function registerToolHandlers(
                 description: "Document name/ID"
               },
               data: {
-                type: "object",
-                description: "Document data to update"
+                type: "string",
+                description: "Document data to update as JSON string"
               }
             },
             required: ["doctype", "name", "data"]
@@ -136,8 +135,8 @@ export function registerToolHandlers(
                 description: "Name of the report"
               },
               filters: {
-                type: "object",
-                description: "Report filters (optional)"
+                type: "string",
+                description: "Report filters as JSON string (optional)"
               }
             },
             required: ["report_name"]
@@ -211,6 +210,27 @@ function checkAuth(erpnext: ERPNextClient): CallToolResult | null {
 }
 
 /**
+ * Parse JSON string to object, returns undefined for empty/undefined input
+ */
+function parseJsonString(value: unknown, fieldName: string): Record<string, unknown> | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (typeof value === 'object') {
+    // Already an object (for backwards compatibility)
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== 'string') {
+    throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a JSON string`);
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be valid JSON`);
+  }
+}
+
+/**
  * Handle get_documents tool
  */
 async function handleGetDocuments(
@@ -224,7 +244,7 @@ async function handleGetDocuments(
   try {
     const doctype = validateIdentifier(args?.doctype, "doctype");
     const fields = args?.fields as string[] | undefined;
-    const filters = args?.filters as Record<string, unknown> | undefined;
+    const filters = parseJsonString(args?.filters, "filters");
     const limit = validatePositiveInt(args?.limit, "limit");
     
     logger.debug(`Getting documents for doctype: ${doctype}`);
@@ -251,7 +271,10 @@ async function handleCreateDocument(
   
   try {
     const doctype = validateIdentifier(args?.doctype, "doctype");
-    const data = validateObject(args?.data, "data");
+    const data = parseJsonString(args?.data, "data");
+    if (!data) {
+      throw new McpError(ErrorCode.InvalidParams, "data is required");
+    }
     
     logger.debug(`Creating document of type: ${doctype}`);
     const result = await erpnext.createDocument(doctype, data);
@@ -278,7 +301,10 @@ async function handleUpdateDocument(
   try {
     const doctype = validateIdentifier(args?.doctype, "doctype");
     const name = validateIdentifier(args?.name, "name");
-    const data = validateObject(args?.data, "data");
+    const data = parseJsonString(args?.data, "data");
+    if (!data) {
+      throw new McpError(ErrorCode.InvalidParams, "data is required");
+    }
     
     logger.debug(`Updating document: ${doctype}/${name}`);
     const result = await erpnext.updateDocument(doctype, name, data);
@@ -304,7 +330,7 @@ async function handleRunReport(
   
   try {
     const reportName = validateIdentifier(args?.report_name, "report_name");
-    const filters = args?.filters as Record<string, unknown> | undefined;
+    const filters = parseJsonString(args?.filters, "filters");
     
     logger.debug(`Running report: ${reportName}`);
     const result = await erpnext.runReport(reportName, filters);
